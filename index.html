@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FixIt Fast - ระบบแจ้งซ่อมบำรุง</title>
+    <!-- เรียกใช้ Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- เรียกใช้ฟอนต์ภาษาไทย -->
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- เรียกใช้ Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        body { font-family: 'Prompt', sans-serif; }
+        .hidden { display: none !important; }
+        /* Loader spinner */
+        .loader {
+            border: 3px solid #f3f3f3; border-top: 3px solid #f97316;
+            border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen">
+
+    <!-- Navbar -->
+    <nav class="bg-slate-800 text-white p-4 shadow-md">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i data-lucide="wrench" class="text-orange-400"></i>
+                <span class="text-xl font-bold">FixIt Fast - แจ้งซ่อมบำรุง</span>
+            </div>
+            <div class="flex space-x-2 md:space-x-4">
+                <button id="nav-requester" onclick="switchView('requester')" class="px-3 py-2 rounded-md bg-orange-500 text-white transition">ผู้แจ้งซ่อม</button>
+                <button id="nav-admin-login" onclick="openLoginModal()" class="px-3 py-2 rounded-md hover:bg-slate-700 flex items-center transition">
+                    <i data-lucide="user" class="w-4 h-4 md:mr-1"></i> <span class="hidden md:inline">สำหรับเจ้าหน้าที่</span>
+                </button>
+                <div id="nav-admin-menu" class="hidden flex items-center space-x-2 md:space-x-4">
+                    <button id="nav-admin" onclick="switchView('admin')" class="px-3 py-2 rounded-md hover:bg-slate-700 transition">แดชบอร์ดแอดมิน</button>
+                    <button onclick="logoutAdmin()" class="flex items-center text-gray-300 hover:text-white transition">
+                        <i data-lucide="log-out" class="w-4 h-4 mr-1"></i> ออกจากระบบ
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- แจ้งเตือนสถานะการเชื่อมต่อ (มุมขวาล่าง) -->
+    <div id="sync-status" class="fixed bottom-4 right-4 bg-white px-4 py-2 rounded-full shadow-lg text-sm font-medium flex items-center space-x-2 text-gray-600 hidden z-50">
+        <div class="loader"></div>
+        <span id="sync-text">กำลังซิงค์ข้อมูล...</span>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="login-modal" class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
+        <div class="bg-white p-8 rounded-lg shadow-xl w-96 mx-4">
+            <h2 class="text-2xl font-bold mb-6 text-center text-gray-800">เข้าสู่ระบบ Admin</h2>
+            <div id="login-error" class="hidden bg-red-100 text-red-600 p-3 rounded mb-4 text-sm text-center">User หรือ Password ไม่ถูกต้อง</div>
+            <form onsubmit="handleLogin(event)">
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Username</label>
+                    <input type="text" id="login-user" class="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-orange-400" required />
+                </div>
+                <div class="mb-6">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Password</label>
+                    <input type="password" id="login-password" class="w-full p-3 border rounded focus:outline-none focus:ring-2 focus:ring-orange-400" required />
+                </div>
+                <div class="flex justify-between">
+                    <button type="button" onclick="closeLoginModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">ยกเลิก</button>
+                    <button type="submit" class="px-6 py-2 bg-slate-800 text-white rounded hover:bg-slate-900 shadow">เข้าสู่ระบบ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <main class="max-w-7xl mx-auto p-4 mt-6">
+
+        <!-- ==================== หน้าผู้แจ้ง (REQUESTER VIEW) ==================== -->
+        <div id="view-requester" class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <!-- ฟอร์มแจ้งซ่อม -->
+            <div class="md:col-span-1">
+                <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                    <h2 class="text-2xl font-bold mb-6 flex items-center text-slate-800">
+                        <i data-lucide="clipboard-list" class="mr-2 text-orange-500"></i> แจ้งซ่อม
+                    </h2>
+                    <form onsubmit="submitRequest(event)" class="space-y-4">
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-1">ชื่อผู้แจ้ง <span class="text-red-500">*</span></label>
+                            <input type="text" id="req-name" required class="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400" placeholder="เช่น สมชาย ใจดี">
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-1">แผนก <span class="text-red-500">*</span></label>
+                            <select id="req-dept" required class="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400">
+                                <option value="">-- เลือกแผนก --</option>
+                                <option value="ไอที">ไอที</option>
+                                <option value="บัญชี">บัญชี</option>
+                                <option value="การตลาด">การตลาด</option>
+                                <option value="บุคคล">บุคคล</option>
+                                <option value="ธุรการ">ธุรการ</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-1">อุปกรณ์ / พื้นที่ <span class="text-red-500">*</span></label>
+                            <input type="text" id="req-area" required class="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400" placeholder="เช่น แอร์ห้องประชุม">
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-1">รายละเอียดปัญหา <span class="text-red-500">*</span></label>
+                            <textarea id="req-details" required rows="4" class="w-full p-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400" placeholder="อธิบายอาการที่พบ..."></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2">ความเร่งด่วน</label>
+                            <div class="flex space-x-4">
+                                <label class="flex items-center cursor-pointer">
+                                    <input type="radio" name="req-urgency" value="ต่ำ" class="mr-2 text-orange-500 focus:ring-orange-400"> <span class="text-green-600">ต่ำ</span>
+                                </label>
+                                <label class="flex items-center cursor-pointer">
+                                    <input type="radio" name="req-urgency" value="ปานกลาง" checked class="mr-2 text-orange-500 focus:ring-orange-400"> <span class="text-yellow-600">ปานกลาง</span>
+                                </label>
+                                <label class="flex items-center cursor-pointer">
+                                    <input type="radio" name="req-urgency" value="สูง" class="mr-2 text-orange-500 focus:ring-orange-400"> <span class="text-red-600 font-bold">สูง</span>
+                                </label>
+                            </div>
+                        </div>
+                        <button type="submit" class="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg shadow-md transition duration-200 text-lg mt-4">
+                            ส่งคำขอแจ้งซ่อม
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- ตารางติดตามสถานะ -->
+            <div class="md:col-span-2">
+                <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100 h-full">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold flex items-center text-slate-800">
+                            <i data-lucide="clock" class="mr-2 text-blue-500"></i> ติดตามสถานะ
+                        </h2>
+                        <button onclick="fetchData()" class="text-sm text-blue-500 hover:text-blue-700 flex items-center">
+                            <i data-lucide="refresh-cw" class="w-4 h-4 mr-1"></i> โหลดข้อมูลล่าสุด
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-50 text-slate-600 border-b-2 border-slate-200">
+                                    <th class="p-3 font-semibold">รหัส/วันที่</th>
+                                    <th class="p-3 font-semibold">พื้นที่/รายละเอียด</th>
+                                    <th class="p-3 font-semibold text-center">สถานะ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="requester-table-body">
+                                <!-- Data will be injected here via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== หน้าแอดมิน (ADMIN VIEW) ==================== -->
+        <div id="view-admin" class="hidden">
+            <!-- KPI Dashboard -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <div class="bg-white p-6 rounded-xl shadow border border-gray-100 flex items-center">
+                    <div class="p-4 bg-blue-100 text-blue-600 rounded-lg mr-4"><i data-lucide="bar-chart-3"></i></div>
+                    <div><div class="text-sm text-gray-500 font-medium">งานทั้งหมด</div><div id="kpi-total" class="text-2xl font-bold text-slate-800">0</div></div>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow border border-gray-100 flex items-center">
+                    <div class="p-4 bg-gray-100 text-gray-600 rounded-lg mr-4"><i data-lucide="alert-circle"></i></div>
+                    <div><div class="text-sm text-gray-500 font-medium">รอรับงาน</div><div id="kpi-pending" class="text-2xl font-bold text-slate-800">0</div></div>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow border border-gray-100 flex items-center">
+                    <div class="p-4 bg-orange-100 text-orange-600 rounded-lg mr-4"><i data-lucide="wrench"></i></div>
+                    <div><div class="text-sm text-gray-500 font-medium">กำลังดำเนินการ</div><div id="kpi-progress" class="text-2xl font-bold text-slate-800">0</div></div>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow border border-gray-100 flex items-center">
+                    <div class="p-4 bg-green-100 text-green-600 rounded-lg mr-4"><i data-lucide="check-circle"></i></div>
+                    <div><div class="text-sm text-gray-500 font-medium">เสร็จสิ้น</div><div id="kpi-done" class="text-2xl font-bold text-slate-800">0</div></div>
+                </div>
+            </div>
+
+            <!-- Admin Table Area -->
+            <div class="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+                <!-- Header & Filters -->
+                <div class="p-4 border-b border-gray-200 bg-slate-50 flex flex-col md:flex-row justify-between items-center gap-4">
+                    <h2 class="text-xl font-bold text-slate-800 flex items-center">
+                        <i data-lucide="clipboard-list" class="mr-2"></i> รายการคำขอทั้งหมด
+                    </h2>
+                    <div class="flex space-x-3 items-center">
+                        <i data-lucide="filter" class="text-gray-500 w-5 h-5"></i>
+                        <select id="filter-status" onchange="renderUI()" class="p-2 text-sm border border-gray-300 rounded focus:outline-none">
+                            <option value="ทั้งหมด">สถานะ: ทั้งหมด</option>
+                            <option value="รอรับงาน">รอรับงาน</option>
+                            <option value="กำลังดำเนินการ">กำลังดำเนินการ</option>
+                            <option value="เสร็จสิ้น">เสร็จสิ้น</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead>
+                            <tr class="bg-white text-slate-600 border-b-2 border-slate-200">
+                                <th class="p-4 font-semibold whitespace-nowrap">รหัส/วันที่</th>
+                                <th class="p-4 font-semibold whitespace-nowrap">ผู้แจ้ง</th>
+                                <th class="p-4 font-semibold">รายละเอียดปัญหา</th>
+                                <th class="p-4 font-semibold text-center whitespace-nowrap">ความเร่งด่วน</th>
+                                <th class="p-4 font-semibold text-center whitespace-nowrap">ผู้รับผิดชอบ</th>
+                                <th class="p-4 font-semibold text-center whitespace-nowrap">จัดการสถานะ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-table-body">
+                            <!-- Data will be injected here via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- ========================================== -->
+    <!-- JAVASCRIPT LOGIC -->
+    <!-- ========================================== -->
+    <script>
+        // ---------------------------------------------------------
+        // 1. ตั้งค่าเชื่อมต่อ GOOGLE SHEETS
+        // นำ URL Web App ของ Google Apps Script มาใส่ตรงนี้
+        // ---------------------------------------------------------
+        const GOOGLE_SHEETS_URL = "https://script.google.com/macros/s/AKfycbye6bRPMCNqky-ukfSS69eOwCToCTQluQevEirp16q3cB_F4X_PrgzQ7DqOdOpIJ-nPlA/execL"; 
+        // ถ้ายังไม่มี URL ระบบจะใช้ Mock Data ทำงานบนหน้าเว็บไปก่อน
+
+        // ตัวแปรเก็บข้อมูลหลัก
+        let requests = [
+            { id: 'REQ-001', name: 'สมชาย ใจดี', department: 'ไอที', area: 'ห้อง Server ชั้น 3', details: 'แอร์ห้องเซิร์ฟเวอร์น้ำแอร์หยด', urgency: 'สูง', status: 'กำลังดำเนินการ', date: '2026-05-01', technician: 'ช่างเอก' },
+            { id: 'REQ-002', name: 'สมหญิง รักงาน', department: 'บัญชี', area: 'โต๊ะทำงานฝ่ายบัญชี', details: 'ปลั๊กไฟใต้โต๊ะช็อต ไม่มีไฟเข้า', urgency: 'ปานกลาง', status: 'รอรับงาน', date: '2026-05-02', technician: '-' }
+        ];
+
+        let isAdminLoggedIn = false;
+        let currentView = 'requester'; // 'requester' หรือ 'admin'
+
+        // ---------------------------------------------------------
+        // 2. ระบบ Navigation และ Login
+        // ---------------------------------------------------------
+        function switchView(view) {
+            currentView = view;
+            
+            // ปุ่ม Navbar
+            document.getElementById('nav-requester').className = view === 'requester' ? 'px-3 py-2 rounded-md bg-orange-500 text-white transition' : 'px-3 py-2 rounded-md hover:bg-slate-700 transition';
+            document.getElementById('nav-admin').className = view === 'admin' ? 'px-3 py-2 rounded-md bg-orange-500 text-white transition' : 'px-3 py-2 rounded-md hover:bg-slate-700 transition';
+            
+            // แสดง/ซ่อน ส่วนของหน้า
+            document.getElementById('view-requester').classList.toggle('hidden', view !== 'requester');
+            document.getElementById('view-admin').classList.toggle('hidden', view !== 'admin');
+            
+            renderUI();
+        }
+
+        function openLoginModal() { document.getElementById('login-modal').classList.remove('hidden'); }
+        function closeLoginModal() { document.getElementById('login-modal').classList.add('hidden'); document.getElementById('login-error').classList.add('hidden'); }
+
+        function handleLogin(e) {
+            e.preventDefault();
+            const user = document.getElementById('login-user').value;
+            const pass = document.getElementById('login-password').value;
+            
+            if (user === 'TTT' && pass === '666') {
+                isAdminLoggedIn = true;
+                closeLoginModal();
+                
+                // สลับปุ่มเมนู
+                document.getElementById('nav-admin-login').classList.add('hidden');
+                document.getElementById('nav-admin-menu').classList.remove('hidden');
+                document.getElementById('nav-admin-menu').classList.add('flex');
+                
+                switchView('admin');
+                document.getElementById('login-user').value = '';
+                document.getElementById('login-password').value = '';
+            } else {
+                document.getElementById('login-error').classList.remove('hidden');
+            }
+        }
+
+        function logoutAdmin() {
+            isAdminLoggedIn = false;
+            document.getElementById('nav-admin-login').classList.remove('hidden');
+            document.getElementById('nav-admin-menu').classList.add('hidden');
+            document.getElementById('nav-admin-menu').classList.remove('flex');
+            switchView('requester');
+        }
+
+        // ---------------------------------------------------------
+        // 3. ฟังก์ชัน Render หน้าจอ
+        // ---------------------------------------------------------
+        function getStatusColor(status) {
+            if (status === 'รอรับงาน') return 'bg-gray-100 text-gray-700 border border-gray-300';
+            if (status === 'กำลังดำเนินการ') return 'bg-blue-100 text-blue-700 border border-blue-300';
+            if (status === 'เสร็จสิ้น') return 'bg-green-100 text-green-700 border border-green-300';
+            return 'bg-gray-100 text-gray-700';
+        }
+
+        function getUrgencyColor(urgency) {
+            if (urgency === 'สูง') return 'text-red-600 font-semibold';
+            if (urgency === 'ปานกลาง') return 'text-yellow-600 font-semibold';
+            if (urgency === 'ต่ำ') return 'text-green-600 font-semibold';
+            return 'text-gray-600';
+        }
+
+        function renderUI() {
+            // เรียงจากใหม่ไปเก่า
+            const sortedRequests = [...requests].reverse();
+
+            if (currentView === 'requester') {
+                const tbody = document.getElementById('requester-table-body');
+                tbody.innerHTML = '';
+                
+                if (sortedRequests.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="3" class="p-8 text-center text-gray-400">ยังไม่มีประวัติการแจ้งซ่อม</td></tr>`;
+                } else {
+                    sortedRequests.forEach(req => {
+                        tbody.innerHTML += `
+                            <tr class="border-b border-gray-100 hover:bg-gray-50 transition">
+                                <td class="p-3">
+                                    <div class="font-medium text-slate-800">${req.id}</div>
+                                    <div class="text-xs text-gray-500">${req.date}</div>
+                                </td>
+                                <td class="p-3">
+                                    <div class="font-semibold text-gray-800">${req.area}</div>
+                                    <div class="text-sm text-gray-500 truncate max-w-[150px] md:max-w-xs" title="${req.details}">${req.details}</div>
+                                </td>
+                                <td class="p-3 text-center">
+                                    <span class="px-3 py-1 rounded-full text-xs font-bold inline-block w-28 text-center ${getStatusColor(req.status)}">
+                                        ${req.status}
+                                    </span>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                }
+            } else if (currentView === 'admin') {
+                // อัปเดต KPIs
+                document.getElementById('kpi-total').innerText = requests.length;
+                document.getElementById('kpi-pending').innerText = requests.filter(r => r.status === 'รอรับงาน').length;
+                document.getElementById('kpi-progress').innerText = requests.filter(r => r.status === 'กำลังดำเนินการ').length;
+                document.getElementById('kpi-done').innerText = requests.filter(r => r.status === 'เสร็จสิ้น').length;
+
+                const filterStatus = document.getElementById('filter-status').value;
+                const filteredReqs = sortedRequests.filter(r => filterStatus === 'ทั้งหมด' || r.status === filterStatus);
+                
+                const tbody = document.getElementById('admin-table-body');
+                tbody.innerHTML = '';
+
+                if (filteredReqs.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="6" class="p-10 text-center text-gray-500 text-lg">ไม่มีข้อมูล</td></tr>`;
+                } else {
+                    filteredReqs.forEach(req => {
+                        const statusClass = getStatusColor(req.status).replace('bg-', 'bg-opacity-20 bg-');
+                        tbody.innerHTML += `
+                            <tr class="border-b border-gray-100 hover:bg-gray-50">
+                                <td class="p-4 align-top">
+                                    <div class="font-bold text-slate-800">${req.id}</div>
+                                    <div class="text-gray-500 text-xs mt-1">${req.date}</div>
+                                </td>
+                                <td class="p-4 align-top">
+                                    <div class="font-medium text-slate-800">${req.name}</div>
+                                    <div class="text-gray-500 text-xs mt-1 bg-gray-200 inline-block px-2 py-0.5 rounded">${req.department}</div>
+                                </td>
+                                <td class="p-4 align-top max-w-xs">
+                                    <div class="font-semibold text-gray-800">${req.area}</div>
+                                    <div class="text-gray-600 mt-1 line-clamp-2 text-xs">${req.details}</div>
+                                </td>
+                                <td class="p-4 align-top text-center">
+                                    <span class="${getUrgencyColor(req.urgency)}">${req.urgency}</span>
+                                </td>
+                                <td class="p-4 align-top text-center">
+                                    <select onchange="updateTech('${req.id}', this.value)" 
+                                        class="p-1.5 text-sm border rounded focus:outline-none focus:ring-1 focus:ring-blue-400 ${req.technician === '-' ? 'border-dashed border-red-300 text-red-500 bg-red-50' : 'border-gray-300 bg-white'}">
+                                        <option value="-" ${req.technician === '-' ? 'selected' : ''}>-- เลือกช่าง --</option>
+                                        <option value="ช่างเอก" ${req.technician === 'ช่างเอก' ? 'selected' : ''}>ช่างเอก</option>
+                                        <option value="ช่างบอย" ${req.technician === 'ช่างบอย' ? 'selected' : ''}>ช่างบอย</option>
+                                        <option value="ช่างนัท" ${req.technician === 'ช่างนัท' ? 'selected' : ''}>ช่างนัท</option>
+                                    </select>
+                                </td>
+                                <td class="p-4 align-top text-center">
+                                    <select onchange="updateStatus('${req.id}', this.value)" 
+                                        class="p-1.5 text-xs font-bold rounded-full w-28 text-center focus:outline-none border ${statusClass}">
+                                        <option value="รอรับงาน" ${req.status === 'รอรับงาน' ? 'selected' : ''}>รอรับงาน</option>
+                                        <option value="กำลังดำเนินการ" ${req.status === 'กำลังดำเนินการ' ? 'selected' : ''}>กำลังดำเนินการ</option>
+                                        <option value="เสร็จสิ้น" ${req.status === 'เสร็จสิ้น' ? 'selected' : ''}>เสร็จสิ้น</option>
+                                    </select>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                }
+            }
+            lucide.createIcons(); // วาดไอคอนใหม่
+        }
+
+        // ---------------------------------------------------------
+        // 4. ระบบบันทึกและแก้ไขข้อมูล (CRUD)
+        // ---------------------------------------------------------
+        function submitRequest(e) {
+            e.preventDefault();
+            
+            // สุ่ม ID และหาวันที่ปัจจุบัน
+            const randomNum = Math.floor(100 + Math.random() * 900);
+            const today = new Date().toISOString().split('T')[0];
+            const urgencyRadio = document.querySelector('input[name="req-urgency"]:checked');
+
+            const newReq = {
+                id: `REQ-${Date.now().toString().slice(-4)}`, // ใช้ Timestamp เพื่อป้องกัน ID ซ้ำ
+                name: document.getElementById('req-name').value,
+                department: document.getElementById('req-dept').value,
+                area: document.getElementById('req-area').value,
+                details: document.getElementById('req-details').value,
+                urgency: urgencyRadio ? urgencyRadio.value : 'ปานกลาง',
+                status: 'รอรับงาน',
+                date: today,
+                technician: '-'
+            };
+
+            requests.push(newReq);
+            renderUI();
+            
+            // ล้างฟอร์ม
+            e.target.reset();
+            alert('ส่งคำขอแจ้งซ่อมเรียบร้อยแล้ว!');
+
+            // ส่งไป Google Sheets
+            syncToGoogleSheets({ action: 'create', data: newReq });
+        }
+
+        function updateStatus(id, newStatus) {
+            const index = requests.findIndex(r => r.id === id);
+            if(index !== -1) {
+                requests[index].status = newStatus;
+                renderUI();
+                syncToGoogleSheets({ action: 'update', id: id, data: { status: newStatus } });
+            }
+        }
+
+        function updateTech(id, newTech) {
+            const index = requests.findIndex(r => r.id === id);
+            if(index !== -1) {
+                requests[index].technician = newTech;
+                // เปลี่ยนสถานะอัตโนมัติถ้ารับงาน
+                if(newTech !== '-' && requests[index].status === 'รอรับงาน') {
+                    requests[index].status = 'กำลังดำเนินการ';
+                }
+                renderUI();
+                syncToGoogleSheets({ action: 'update', id: id, data: { technician: newTech, status: requests[index].status } });
+            }
+        }
+
+        // ---------------------------------------------------------
+        // 5. การเชื่อมต่อ Google Sheets API (Fetch)
+        // ---------------------------------------------------------
+        function showSyncUI(show, text = 'กำลังทำงาน...') {
+            const ui = document.getElementById('sync-status');
+            const txt = document.getElementById('sync-text');
+            if(show) {
+                txt.innerText = text;
+                ui.classList.remove('hidden');
+            } else {
+                setTimeout(() => ui.classList.add('hidden'), 1000); // ดีเลย์นิดหน่อยให้เห็นว่าเสร็จ
+            }
+        }
+
+        async function fetchData() {
+            if(GOOGLE_SHEETS_URL === "YOUR_GOOGLE_APPS_SCRIPT_WEBAPP_URL") return; // ถ้าไม่ได้ใส่ URL ให้ข้ามไป
+
+            showSyncUI(true, 'กำลังโหลดข้อมูลจากฐานข้อมูล...');
+            try {
+                const response = await fetch(GOOGLE_SHEETS_URL);
+                const result = await response.json();
+                if(result.status === 'success' && result.data) {
+                    requests = result.data;
+                    renderUI();
+                }
+            } catch (error) {
+                console.error("Error fetching data:", error);
+            } finally {
+                showSyncUI(false);
+            }
+        }
+
+        async function syncToGoogleSheets(payload) {
+            if(GOOGLE_SHEETS_URL === "YOUR_GOOGLE_APPS_SCRIPT_WEBAPP_URL") {
+                console.log("Mock Sync:", payload);
+                return; // ถ้าไม่ได้ใส่ URL ให้แค่ log เฉยๆ
+            }
+
+            showSyncUI(true, 'กำลังบันทึกลงฐานข้อมูล...');
+            try {
+                await fetch(GOOGLE_SHEETS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' } 
+                    // ใช้ text/plain เพื่อหลีกเลี่ยงปัญหา CORS Preflight ใน Google Sheets
+                });
+            } catch (error) {
+                console.error("Error saving to Google Sheets:", error);
+            } finally {
+                showSyncUI(false);
+            }
+        }
+
+        // ---------------------------------------------------------
+        // เริ่มต้นการทำงาน (Initialize)
+        // ---------------------------------------------------------
+        lucide.createIcons();
+        renderUI();
+        
+        // โหลดข้อมูลจาก Sheets ทันทีที่เปิดหน้าเว็บ
+        window.addEventListener('DOMContentLoaded', () => {
+            fetchData();
+        });
+
+    </script>
+</body>
+</html>
